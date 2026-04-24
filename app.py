@@ -39,8 +39,11 @@ def server(input, output, session):
 
         run_result.set("Installing Wine… (this may take a minute)")
 
-        # Try apt (Debian/Ubuntu), then dnf (Fedora/RHEL)
+        # Try without sudo first (containers often run as root),
+        # then fall back to sudo variants.
         for cmd in (
+            ["apt-get", "install", "-y", "wine"],
+            ["dnf",     "install", "-y", "wine"],
             ["sudo", "apt-get", "install", "-y", "wine"],
             ["sudo", "dnf",     "install", "-y", "wine"],
         ):
