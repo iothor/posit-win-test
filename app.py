@@ -5,6 +5,29 @@ import platform
 import shutil
 from shiny import App, ui, render, reactive
 
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Portable wine is extracted here (no root needed)
+WINE_PORTABLE_DIR = os.path.join(APP_DIR, "wine-portable")
+WINE_PORTABLE_TARBALL = os.path.join(APP_DIR, "wine-portable.tar.xz")
+
+
+
+def _find_wine() -> str | None:
+    """Return path to a usable wine binary, or None."""
+    # 1. portable wine bundled / extracted in the app directory
+    for candidate in (
+        os.path.join(WINE_PORTABLE_DIR, "bin", "wine"),
+        os.path.join(WINE_PORTABLE_DIR, "wine-10.0-amd64", "bin", "wine"),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    # 2. system wine
+    system_wine = shutil.which("wine")
+    if system_wine:
+        return system_wine
+    return None
+
 app_ui = ui.page_fluid(
     ui.h2("Run .exe on Linux Test"),
     ui.p(
@@ -29,7 +52,7 @@ app_ui = ui.page_fluid(
 def server(input, output, session):
     run_result = reactive.value("(not run yet)")
 
-    exe_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hello.exe")
+    exe_path = os.path.join(APP_DIR, "hello.exe")
 
     # ── Install Wine ─────────────────────────────────────────────────────────
     @reactive.effect
@@ -39,61 +62,61 @@ def server(input, output, session):
             run_result.set("Wine installation is only supported on Linux.")
             return
 
-        # Check if wine is already installed
-        check = subprocess.run(["which", "wine"], capture_output=True, text=True)
-        if check.returncode == 0:
-            run_result.set(f"Wine is already installed at: {check.stdout.strip()}")
+        existing = _find_wine()
+        if existing:
+            run_result.set(f"Wine is already available at: {existing}")
             return
 
         run_result.set("Installing Wine… (this may take a minute)")
 
-        # Try without sudo first (containers often run as root),
-        # then fall back to sudo variants.
-        candidates = [
-            ["apt-get", "install", "-y", "wine"],
-            ["dnf", "install", "-y", "wine"],
-            ["sudo", "apt-get", "install", "-y", "wine"],
-            ["sudo", "dnf", "install", "-y", "wine"],
-        ]
-        proc = None
-        for cmd in candidates:
-            # Skip if the package manager binary is not on PATH
-            if shutil.which(cmd[0] if cmd[0] != "sudo" else cmd[1]) is None:
-                continue
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if proc.returncode == 0:
-                run_result.set(
-                    f"Wine installed successfully via '{cmd[1]}'.\n\n"
-                    f"Stdout:\n{proc.stdout.strip()}"
-                )
-                return
-            else:
-                print(
-                    f"Attempt with '{' '.join(cmd)}' failed (exit code {proc.returncode}). Trying next option if available. Stdout: {proc.stdout.strip()}\nStderr: {proc.stderr.strip()}"
-                )
+        log = []
 
-        # ── Fallback: install via curl script (WineHQ) ────────────────────────
-        if shutil.which("curl") is not None:
-            run_result.set("Package manager install failed. Trying curl fallback…")
-            curl_cmd = [
-                "bash", "-c",
-                "curl -fsSL https://dl.winehq.org/wine-builds/winehq.key | apt-key add - "
-                "&& curl -fsSL https://dl.winehq.org/wine-builds/ubuntu/dists/focal/winehq-focal.sources "
-                "  -o /etc/apt/sources.list.d/winehq-focal.sources "
-                "&& apt-get update -y "
-                "&& apt-get install -y --install-recommends winehq-stable",
-            ]
-            proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=600)
+        def _try(cmd, label, timeout=300):
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if proc.returncode == 0:
                 run_result.set(
-                    f"Wine installed successfully via curl.\n\n"
-                    f"Stdout:\n{proc.stdout.strip()}"
+                    f"Wine installed successfully via {label}.\n\nStdout:\n{proc.stdout.strip()}"
                 )
-                return
+                return True
+            log.append(
+                f"[{label}] exit={proc.returncode}\n"
+                f"  stderr: {proc.stderr.strip()[:300]}"
+            )
+            return False
+
+        # 1. ── Portable tarball already in the repo ───────────────────────────
+        if os.path.isfile(WINE_PORTABLE_TARBALL):
+            try:
+                run_result.set(f"Extracting bundled {WINE_PORTABLE_TARBALL} …")
+                with tarfile.open(WINE_PORTABLE_TARBALL, "r:xz") as tf:
+                    tf.extractall(WINE_PORTABLE_DIR)
+                wine_bin = _find_wine()
+                if wine_bin:
+                    os.chmod(wine_bin, os.stat(wine_bin).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                    run_result.set(f"Portable Wine extracted and ready at: {wine_bin}")
+                    return
+                log.append("[portable-tarball] extracted but wine binary not found inside")
+            except Exception as e:
+                log.append(f"[portable-tarball] extraction failed: {e}")
+
+        # 2. ── System package managers ────────────────────────────────────────
+        for cmd, label in [
+            (["apt-get", "install", "-y", "wine"], "apt-get"),
+            (["dnf", "install", "-y", "wine"], "dnf"),
+            (["sudo", "apt-get", "install", "-y", "wine"], "sudo apt-get"),
+            (["sudo", "dnf", "install", "-y", "wine"], "sudo dnf"),
+        ]:
+            pkg_mgr = cmd[1] if cmd[0] == "sudo" else cmd[0]
+            if shutil.which(cmd[0]) and shutil.which(pkg_mgr):
+                if _try(cmd, label):
+                    return
 
         run_result.set(
-            f"Wine installation failed.\n\n"
-            f"Stdout:\n{proc.stdout.strip() if proc else '(none)'}\n\nStderr:\n{proc.stderr.strip() if proc else 'No supported package manager (apt-get/dnf) or curl was found on PATH.'}"
+            "Wine installation failed. All methods tried:\n\n"
+            + "\n\n".join(log)
+            + "\n\nTip: download wine-portable.tar.xz from\n"
+            + WINE_PORTABLE_URL
+            + "\nand place it next to app.py in the repository."
         )
 
     # ── Set executable permission ─────────────────────────────────────────────
@@ -124,11 +147,9 @@ def server(input, output, session):
 
         # On Linux, try to run via wine if available; fall back to direct exec
         if platform.system() == "Linux":
-            wine_check = subprocess.run(
-                ["which", "wine"], capture_output=True, text=True
-            )
-            if wine_check.returncode == 0:
-                cmd = ["wine", exe_path]
+            wine_bin = _find_wine()
+            if wine_bin:
+                cmd = [wine_bin, exe_path]
             else:
                 cmd = [exe_path]
         else:

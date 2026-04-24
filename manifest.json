@@ -32,7 +32,7 @@
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
     },
     "app.py": {
-      "checksum": "b25fa4aa5df7e2e0c3d22fbe2b4966bc"
+      "checksum": "ee2a4293a2d22102ef8f86b83748ea0e"
     },
     "hello.c": {
       "checksum": "3e47b340d2030aff6ca0092332c05f62"
@@ -45,6 +45,9 @@
     },
     "uv.lock": {
       "checksum": "735c395c1fb68dece4918586824ea7a7"
+    },
+    "wine-portable.tar.xz": {
+      "checksum": "bc525e2281d7450f41714631487856d2"
     }
   }
 }
