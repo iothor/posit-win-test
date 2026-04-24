@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "locale": "English_United States.1252",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "app"
+  },
+  "python": {
+    "version": "3.11.14",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.0.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "environment": {
+    "python": {
+      "requires": "~=3.11.0"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "0ce1a3a596ab35d466447d1b5eb02ed4"
+    },
+    ".gitignore": {
+      "checksum": "03570f2a2e6c9b30996df2d6f93d5a0a"
+    },
+    ".python-version": {
+      "checksum": "c0479ff484dacd51dc5ba0461b16b9bf"
+    },
+    "README.md": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "app.py": {
+      "checksum": "669ca8f186d7bbcbf8517897ed7453bd"
+    },
+    "hello.c": {
+      "checksum": "3e47b340d2030aff6ca0092332c05f62"
+    },
+    "hello.exe": {
+      "checksum": "04a437344a582775b899571e08174463"
+    },
+    "pyproject.toml": {
+      "checksum": "925ce9aa6cf80b7bd1db06079963658b"
+    },
+    "uv.lock": {
+      "checksum": "735c395c1fb68dece4918586824ea7a7"
+    }
+  }
+}
